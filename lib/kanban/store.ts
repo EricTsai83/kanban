@@ -157,6 +157,7 @@ export async function createWorkItem(input: unknown) {
     priority: normalized.priority ?? "medium",
     labels: normalized.labels ?? [],
     estimate: normalized.estimate ?? null,
+    startDate: normalized.startDate ?? null,
     dueDate: normalized.dueDate ?? null,
     isBlocked: normalized.isBlocked ?? false,
     coverImage: normalized.coverImage ?? null,

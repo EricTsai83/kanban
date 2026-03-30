@@ -4,11 +4,6 @@
 
 The application SHALL provide three theme modes — light, dark, and system (OS preference) — managed by `next-themes`.
 
-#### Scenario: Default theme follows system preference
-
-- **WHEN** the application loads for the first time
-- **THEN** the active theme SHALL match the user's operating system color scheme preference
-
 #### Scenario: Theme persists across sessions
 
 - **WHEN** user selects a theme (light, dark, or system) and refreshes the page
@@ -21,56 +16,33 @@ The application SHALL provide three theme modes — light, dark, and system (OS 
 
 ### Requirement: CSS variables define light and dark palettes
 
-The application SHALL use CSS custom properties under `:root` (light) and `.dark` (dark) selectors to define all color tokens consumed by Shadcn components and custom UI.
+The application SHALL use CSS custom properties under `:root` (light) and `.dark` (dark) selectors to define all color tokens. The dark mode palette SHALL include 8+ distinct grayscale levels providing uniform perceptual spacing. Sidebar variables SHALL use a flat solid color with optional minimal cool-tone tint (oklch chroma ~0.01) for depth differentiation. No gradient, glow, or transparency variables SHALL be defined.
 
 #### Scenario: Light palette applies by default
 
 - **WHEN** no `.dark` class is present on the `<html>` element
-- **THEN** the `:root` palette SHALL provide light-mode colors for `--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--accent`, `--border`, `--destructive`, `--ring`, and custom sidebar/priority tokens
+- **THEN** the `:root` palette SHALL provide light-mode colors with an equivalent number of grayscale surface levels as dark mode
 
 #### Scenario: Dark palette activates via class
 
 - **WHEN** the `.dark` class is added to the `<html>` element
-- **THEN** the `.dark` selector SHALL override all CSS custom properties with dark-mode appropriate values
+- **THEN** the `.dark` selector SHALL override all CSS custom properties with dark-mode values featuring 8+ grayscale levels and near-invisible border colors (3-6% white opacity)
 
 #### Scenario: Sidebar colors adapt in dark mode
 
 - **WHEN** dark mode is active
-- **THEN** the sidebar rail SHALL use a dark palette that is visually distinct from the content area's dark background
+- **THEN** the sidebar rail SHALL use a solid flat color that is perceptibly darker or lighter than the content area background, without any transparency or blur effects
 
-### Requirement: ThemeProvider wraps the application
+### Requirement: Application defaults to dark theme
 
-A `ThemeProvider` component using `next-themes` SHALL wrap the application in `layout.tsx` with `attribute="class"`, `defaultTheme="system"`, and `enableSystem`.
+The application SHALL use `defaultTheme="dark"` in the ThemeProvider configuration, making dark mode the initial experience for new users. Theme switching to light and system modes SHALL remain fully functional.
 
-#### Scenario: ThemeProvider is present in the component tree
+#### Scenario: First-time user sees dark mode
 
-- **WHEN** any page of the application renders
-- **THEN** it SHALL be a descendant of the `ThemeProvider` component
+- **WHEN** a new user loads the application with no stored theme preference
+- **THEN** the application SHALL render in dark mode
 
-#### Scenario: HTML element supports hydration warning suppression
+#### Scenario: Theme switching still works
 
-- **WHEN** the app renders server-side
-- **THEN** the `<html>` element SHALL include `suppressHydrationWarning` to prevent mismatch warnings from the `next-themes` injected script
-
-### Requirement: Theme toggle is accessible from the sidebar
-
-A theme toggle control SHALL be placed in the sidebar rail allowing users to cycle through light → dark → system themes.
-
-#### Scenario: Toggle cycles through themes
-
-- **WHEN** user clicks the theme toggle button
-- **THEN** the active theme SHALL cycle: light → dark → system → light
-
-#### Scenario: Toggle displays the current theme icon
-
-- **WHEN** the current theme is light
-- **THEN** a sun icon SHALL be displayed
-- **WHEN** the current theme is dark
-- **THEN** a moon icon SHALL be displayed
-- **WHEN** the current theme is system
-- **THEN** a monitor icon SHALL be displayed
-
-#### Scenario: Toggle has a tooltip
-
-- **WHEN** user hovers over the theme toggle button
-- **THEN** a tooltip SHALL display the current theme name (e.g., "Theme: dark")
+- **WHEN** a user switches to light or system theme via the toggle
+- **THEN** the selected theme SHALL apply correctly and persist across sessions

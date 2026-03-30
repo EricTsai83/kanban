@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { I18nProvider } from "@/components/i18n-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider } from "@/lib/auth-context";
 import { defaultMetadata, DEFAULT_LOCALE } from "@/lib/i18n";
 
 import "./globals.css";
@@ -31,9 +32,11 @@ export default function RootLayout({
     >
       <body className="min-h-full flex">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          <I18nProvider>
-            <TooltipProvider>{children}</TooltipProvider>
-          </I18nProvider>
+          <AuthProvider>
+            <I18nProvider>
+              <TooltipProvider>{children}</TooltipProvider>
+            </I18nProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

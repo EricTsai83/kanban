@@ -7,13 +7,17 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { useRouter } from "next/navigation";
+import { GanttChart as GanttChartComponent } from "@/components/gantt-chart";
 import { useTheme } from "next-themes";
 import {
   AlertTriangle,
+  AlignJustify,
   Calendar,
   ChevronDown,
   ChevronUp,
   Filter,
+  GanttChart,
   ImageIcon,
   Kanban,
   Languages,
@@ -68,6 +72,8 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { useI18n } from "@/components/i18n-provider";
+import { UserMenu } from "@/components/auth/user-menu";
+import { useAuth } from "@/lib/auth-context";
 
 import { formatMessage, getDictionary, type AppDictionary, type Locale } from "@/lib/i18n";
 import { KANBAN_PRIORITIES } from "@/lib/kanban/constants";
@@ -76,6 +82,9 @@ import type {
   KanbanBoard,
   KanbanGroupBy,
   KanbanPriority,
+  KanbanSortDir,
+  KanbanSortField,
+  KanbanViewMode,
   KanbanWorkItem,
   UpdateColumnsInput,
   UpdateWorkItemInput,
@@ -93,6 +102,7 @@ type ItemFormState = {
   priority: KanbanPriority;
   labels: string;
   estimate: string;
+  startDate: string;
   dueDate: string;
   isBlocked: boolean;
   coverImage: string;
@@ -121,6 +131,59 @@ const DEFAULT_BOARD_NAMES: string[] = [
 
 /* ─── pure helpers ─── */
 
+function formatDueDate(
+  dateStr: string,
+  locale: Locale,
+  relativeLabels: { today: string; tomorrow: string; yesterday: string },
+): string {
+  const [y, m, d] = dateStr.slice(0, 10).split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((date.getTime() - today.getTime()) / 86400000);
+
+  if (diffDays === 0) return relativeLabels.today;
+  if (diffDays === 1) return relativeLabels.tomorrow;
+  if (diffDays === -1) return relativeLabels.yesterday;
+
+  const sameYear = date.getFullYear() === today.getFullYear();
+  const fmt = new Intl.DateTimeFormat(locale, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+  return fmt.format(date);
+}
+
+type DueDateUrgency = "overdue" | "today" | "soon" | "normal";
+
+function getDueDateUrgency(dateStr: string): DueDateUrgency {
+  const [y, m, d] = dateStr.slice(0, 10).split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((date.getTime() - today.getTime()) / 86400000);
+
+  if (diffDays < 0) return "overdue";
+  if (diffDays === 0) return "today";
+  if (diffDays <= 3) return "soon";
+  return "normal";
+}
+
+const URGENCY_BADGE_CLASS: Record<DueDateUrgency, string> = {
+  overdue: "border-destructive/40 bg-destructive/10 text-destructive",
+  today: "border-amber-400/40 bg-amber-50 text-amber-600 dark:bg-amber-950/30",
+  soon: "border-yellow-400/40 bg-yellow-50 text-yellow-600 dark:bg-yellow-950/30",
+  normal: "",
+};
+
+const URGENCY_TEXT_CLASS: Record<DueDateUrgency, string> = {
+  overdue: "text-destructive",
+  today: "text-amber-600",
+  soon: "text-yellow-600",
+  normal: "text-muted-foreground",
+};
+
 function createEmptyForm(columnId = ""): ItemFormState {
   return {
     title: "",
@@ -129,6 +192,7 @@ function createEmptyForm(columnId = ""): ItemFormState {
     priority: "medium",
     labels: "",
     estimate: "",
+    startDate: "",
     dueDate: "",
     isBlocked: false,
     coverImage: "",
@@ -148,6 +212,7 @@ function buildItemForm(item: KanbanWorkItem): ItemFormState {
     priority: item.priority,
     labels: item.labels.join(", "),
     estimate: item.estimate == null ? "" : String(item.estimate),
+    startDate: item.startDate ?? "",
     dueDate: item.dueDate ?? "",
     isBlocked: item.isBlocked,
     coverImage: item.coverImage ?? "",
@@ -168,6 +233,7 @@ function buildPayload(
       .map((l) => l.trim())
       .filter(Boolean),
     estimate: f.estimate === "" ? null : Number(f.estimate),
+    startDate: f.startDate || null,
     dueDate: f.dueDate || null,
     isBlocked: f.isBlocked,
     coverImage: f.coverImage || null,
@@ -360,6 +426,13 @@ function optimisticMove(
 
 export function KanbanApp() {
   const { locale, setLocale, copy } = useI18n();
+  const { logout } = useAuth();
+  const router = useRouter();
+
+  function handleLogout() {
+    logout();
+    router.replace("/login");
+  }
   const [board, setBoard] = useState<KanbanBoard | null>(null);
   const [loading, setLoading] = useState(true);
   const [mutating, setMutating] = useState(false);
@@ -381,6 +454,9 @@ export function KanbanApp() {
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
   const [density, setDensity] = useState<"compact" | "detailed">("detailed");
+  const [viewMode, setViewMode] = useState<KanbanViewMode>("board");
+  const [sortField, setSortField] = useState<KanbanSortField | null>(null);
+  const [sortDir, setSortDir] = useState<KanbanSortDir>(null);
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
@@ -463,6 +539,31 @@ export function KanbanApp() {
     }
     return Array.from(g.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [board, copy.itemEditor.unassigned, copy.shared.unknown, groupBy, visible]);
+
+  const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+
+  const sortedItems = useMemo(() => {
+    if (!sortField || !sortDir) return visible;
+    return [...visible].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "priority") {
+        cmp = (PRIORITY_ORDER[a.priority] ?? 99) - (PRIORITY_ORDER[b.priority] ?? 99);
+      } else if (sortField === "title") {
+        cmp = a.title.localeCompare(b.title);
+      } else if (sortField === "status") {
+        const sa = board ? colName(board, a.columnId, "") : "";
+        const sb = board ? colName(board, b.columnId, "") : "";
+        cmp = sa.localeCompare(sb);
+      } else if (sortField === "assignee") {
+        cmp = a.assignee.localeCompare(b.assignee);
+      } else if (sortField === "dueDate") {
+        const da = a.dueDate ?? "";
+        const db = b.dueDate ?? "";
+        cmp = da.localeCompare(db);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [visible, sortField, sortDir, board]);
 
   const filterOpts = useMemo(() => {
     if (!board)
@@ -734,6 +835,7 @@ export function KanbanApp() {
 
         {/* theme toggle + metrics */}
         <div className="mt-auto flex flex-col items-center gap-3 pb-2">
+          <UserMenu onLogout={handleLogout} />
           <Button
             aria-label={themeTooltip()}
             size="icon"
@@ -787,30 +889,88 @@ export function KanbanApp() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center rounded-md border p-0.5">
-              <Button
-                variant={density === "compact" ? "secondary" : "ghost"}
-                size="icon-xs"
-                onClick={() => setDensity("compact")}
-                aria-label="Compact view"
-              >
-                <List className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant={density === "detailed" ? "secondary" : "ghost"}
-                size="icon-xs"
-                onClick={() => setDensity("detailed")}
-                aria-label="Detailed view"
-              >
-                <LayoutList className="h-3.5 w-3.5" />
-              </Button>
+            {/* view controls group */}
+            <div className="flex items-center gap-1">
+              {/* view mode switcher: Board / List / Gantt */}
+              <div className="flex items-center rounded-md border p-0.5">
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <Button
+                      variant={viewMode === "board" ? "secondary" : "ghost"}
+                      size="icon-xs"
+                      onClick={() => {
+                        setViewMode("board");
+                        setSortField(null);
+                        setSortDir(null);
+                      }}
+                      aria-label={copy.views.board}
+                    />
+                  }>
+                    <Kanban className="h-3.5 w-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent>{copy.views.board}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <Button
+                      variant={viewMode === "list" ? "secondary" : "ghost"}
+                      size="icon-xs"
+                      onClick={() => setViewMode("list")}
+                      aria-label={copy.views.list}
+                    />
+                  }>
+                    <List className="h-3.5 w-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent>{copy.views.list}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <Button
+                      variant={viewMode === "gantt" ? "secondary" : "ghost"}
+                      size="icon-xs"
+                      onClick={() => setViewMode("gantt")}
+                      aria-label={copy.views.gantt}
+                    />
+                  }>
+                    <GanttChart className="h-3.5 w-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent>{copy.views.gantt}</TooltipContent>
+                </Tooltip>
+              </div>
+              {/* density switcher — hidden in gantt mode */}
+              {viewMode !== "gantt" && (
+              <div className="flex items-center rounded-md border p-0.5">
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <Button
+                      variant={density === "compact" ? "secondary" : "ghost"}
+                      size="icon-xs"
+                      onClick={() => setDensity("compact")}
+                      aria-label={copy.views.compact}
+                    />
+                  }>
+                    <AlignJustify className="h-3.5 w-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent>{copy.views.compact}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <Button
+                      variant={density === "detailed" ? "secondary" : "ghost"}
+                      size="icon-xs"
+                      onClick={() => setDensity("detailed")}
+                      aria-label={copy.views.detailed}
+                    />
+                  }>
+                    <LayoutList className="h-3.5 w-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent>{copy.views.detailed}</TooltipContent>
+                </Tooltip>
+              </div>
+              )}
             </div>
-            <LanguageSwitcher
-              locale={locale}
-              onLocaleChange={setLocale}
-              copy={copy}
-              className="w-[152px]"
-            />
+            {/* vertical divider separating view controls from action buttons */}
+            <div className="h-5 w-px bg-border" aria-hidden="true" />
             <Button
               variant="outline"
               size="sm"
@@ -833,7 +993,46 @@ export function KanbanApp() {
           </div>
         )}
 
+        {/* list view */}
+        {viewMode === "list" && (
+          <div className="flex-1 overflow-auto">
+            <ListViewLayout
+              items={sortedItems}
+              board={board}
+              sortField={sortField}
+              sortDir={sortDir}
+              onSort={(field) => {
+                if (sortField !== field) {
+                  setSortField(field);
+                  setSortDir("asc");
+                } else if (sortDir === "asc") {
+                  setSortDir("desc");
+                } else if (sortDir === "desc") {
+                  setSortField(null);
+                  setSortDir(null);
+                }
+              }}
+              onItemClick={openEdit}
+              copy={copy}
+              locale={locale}
+            />
+          </div>
+        )}
+
+        {/* gantt view */}
+        {viewMode === "gantt" && (
+          <div className="flex-1 overflow-hidden">
+            <GanttChartComponent
+              items={visible}
+              columns={board.columns}
+              onItemClick={(item) => openEdit(item)}
+              copy={copy}
+            />
+          </div>
+        )}
+
         {/* board columns */}
+        {viewMode === "board" && (
         <div className="flex-1 overflow-x-auto">
           {groupBy === "workflow" ? (
             <div className="flex h-full gap-px">
@@ -879,6 +1078,7 @@ export function KanbanApp() {
                             key={item.id}
                             item={item}
                             copy={copy}
+                            locale={locale}
                             density={density}
                             onClick={() => openEdit(item)}
                             onDragStart={() => setDraggingId(item.id)}
@@ -914,6 +1114,7 @@ export function KanbanApp() {
                         key={item.id}
                         item={item}
                         copy={copy}
+                        locale={locale}
                         density={density}
                         onClick={() => openEdit(item)}
                       />
@@ -924,6 +1125,7 @@ export function KanbanApp() {
             </div>
           )}
         </div>
+        )}
       </main>
 
       {/* ── item editor dialog ── */}
@@ -1041,6 +1243,17 @@ export function KanbanApp() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
+                <Label htmlFor="item-start">{copy.itemEditor.startDate}</Label>
+                <Input
+                  id="item-start"
+                  type="date"
+                  value={form.startDate}
+                  onChange={(e) =>
+                    setForm((c) => ({ ...c, startDate: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="item-due">{copy.itemEditor.dueDate}</Label>
                 <Input
                   id="item-due"
@@ -1051,17 +1264,17 @@ export function KanbanApp() {
                   }
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="item-labels">{copy.itemEditor.labels}</Label>
-                <Input
-                  id="item-labels"
-                  value={form.labels}
-                  onChange={(e) =>
-                    setForm((c) => ({ ...c, labels: e.target.value }))
-                  }
-                  placeholder={copy.itemEditor.labelsPlaceholder}
-                />
-              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="item-labels">{copy.itemEditor.labels}</Label>
+              <Input
+                id="item-labels"
+                value={form.labels}
+                onChange={(e) =>
+                  setForm((c) => ({ ...c, labels: e.target.value }))
+                }
+                placeholder={copy.itemEditor.labelsPlaceholder}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="item-cover">
@@ -1232,7 +1445,18 @@ export function KanbanApp() {
           <SheetHeader>
             <SheetTitle>{copy.settings.workflowColumns}</SheetTitle>
           </SheetHeader>
-          <div className="flex-1 space-y-2 overflow-y-auto px-4">
+          <div className="flex-1 space-y-4 overflow-y-auto px-4">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Language
+              </p>
+              <LanguageSwitcher
+                locale={locale}
+                onLocaleChange={setLocale}
+                copy={copy}
+              />
+            </div>
+            <div className="space-y-2">
             {draftCols.map((col, idx) => {
               const count = board.items.filter(
                 (i) => i.columnId === col.id,
@@ -1329,6 +1553,7 @@ export function KanbanApp() {
             >
               {copy.settings.saveWorkflow}
             </Button>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
@@ -1398,6 +1623,7 @@ function CoverImage({
 function WorkItemCard({
   item,
   copy,
+  locale,
   density = "detailed",
   onClick,
   onDragStart,
@@ -1405,6 +1631,7 @@ function WorkItemCard({
 }: {
   item: KanbanWorkItem;
   copy: AppDictionary;
+  locale: Locale;
   density?: "compact" | "detailed";
   onClick: () => void;
   onDragStart?: () => void;
@@ -1500,9 +1727,15 @@ function WorkItemCard({
               </span>
             )}
             {item.dueDate && (
-              <Badge variant="secondary" className="flex items-center gap-0.5 px-1.5 py-0 text-[10px]">
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "flex items-center gap-0.5 px-1.5 py-0 text-[10px]",
+                  URGENCY_BADGE_CLASS[getDueDateUrgency(item.dueDate)],
+                )}
+              >
                 <Calendar className="h-2.5 w-2.5" />
-                {item.dueDate}
+                {formatDueDate(item.dueDate, locale, copy.shared)}
               </Badge>
             )}
             {item.estimate != null && (
@@ -1523,6 +1756,163 @@ function WorkItemCard({
           </div>
         )}
       </div>
+    </button>
+  );
+}
+
+// ── List View ─────────────────────────────────────────────────────────────────
+
+const SORTABLE_COLS: Array<{ field: KanbanSortField; labelKey: keyof AppDictionary["listView"] }> = [
+  { field: "priority", labelKey: "priority" },
+  { field: "title", labelKey: "title" },
+  { field: "status", labelKey: "status" },
+  { field: "assignee", labelKey: "assignee" },
+  { field: "dueDate", labelKey: "dueDate" },
+];
+
+function ListViewLayout({
+  items,
+  board,
+  sortField,
+  sortDir,
+  onSort,
+  onItemClick,
+  copy,
+  locale,
+}: {
+  items: KanbanWorkItem[];
+  board: KanbanBoard;
+  sortField: KanbanSortField | null;
+  sortDir: KanbanSortDir;
+  onSort: (field: KanbanSortField) => void;
+  onItemClick: (item: KanbanWorkItem) => void;
+  copy: AppDictionary;
+  locale: Locale;
+}) {
+  return (
+    <div className="flex flex-col">
+      {/* header */}
+      <div className="sticky top-0 z-10 flex items-center border-b border-border bg-background px-4 py-2 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+        {SORTABLE_COLS.map(({ field, labelKey }) => (
+          <button
+            key={field}
+            type="button"
+            onClick={() => onSort(field)}
+            className={cn(
+              "flex items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-accent hover:text-accent-foreground",
+              field === "priority" && "w-24 shrink-0",
+              field === "title" && "min-w-0 flex-1",
+              field === "status" && "w-32 shrink-0",
+              field === "assignee" && "w-28 shrink-0",
+              field === "dueDate" && "w-28 shrink-0",
+            )}
+          >
+            {copy.listView[labelKey]}
+            {sortField === field && (
+              sortDir === "asc"
+                ? <ChevronUp className="h-3 w-3" />
+                : <ChevronDown className="h-3 w-3" />
+            )}
+          </button>
+        ))}
+        <span className="w-24 shrink-0 px-2 py-1">{copy.listView.labels}</span>
+        <span className="w-16 shrink-0 px-2 py-1 text-right">{copy.listView.estimate}</span>
+      </div>
+
+      {/* rows */}
+      {items.length === 0 ? (
+        <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+          {copy.listView.noItems}
+        </div>
+      ) : (
+        items.map((item) => (
+          <ListViewRow
+            key={item.id}
+            item={item}
+            statusName={colName(board, item.columnId, copy.shared.unknown)}
+            copy={copy}
+            locale={locale}
+            onClick={() => onItemClick(item)}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
+function ListViewRow({
+  item,
+  statusName,
+  copy,
+  locale,
+  onClick,
+}: {
+  item: KanbanWorkItem;
+  statusName: string;
+  copy: AppDictionary;
+  locale: Locale;
+  onClick: () => void;
+}) {
+  const visibleLabels = item.labels.slice(0, 2);
+  const overflowCount = item.labels.length - 2;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center border-b border-border/50 px-4 py-2.5 text-left text-sm transition-colors hover:bg-accent/40"
+    >
+      {/* priority */}
+      <div className="flex w-24 shrink-0 items-center gap-1.5 px-2">
+        <div
+          className="h-2 w-2 rounded-full"
+          style={{ backgroundColor: `var(--priority-${item.priority})` }}
+        />
+        <span className="text-xs capitalize text-muted-foreground">{item.priority}</span>
+      </div>
+
+      {/* title */}
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 px-2">
+        {item.isBlocked && (
+          <AlertTriangle className="h-3 w-3 shrink-0 text-priority-urgent" />
+        )}
+        <span className="truncate font-medium text-foreground">{item.title}</span>
+      </div>
+
+      {/* status */}
+      <span className="w-32 shrink-0 truncate px-2 text-xs text-muted-foreground">
+        {statusName}
+      </span>
+
+      {/* assignee */}
+      <span className="w-28 shrink-0 truncate px-2 text-xs text-muted-foreground">
+        {item.assignee || copy.itemEditor.unassigned}
+      </span>
+
+      {/* due date */}
+      <span className={cn(
+        "w-28 shrink-0 px-2 text-xs",
+        item.dueDate ? URGENCY_TEXT_CLASS[getDueDateUrgency(item.dueDate)] : "text-muted-foreground",
+      )}>
+        {item.dueDate ? formatDueDate(item.dueDate, locale, copy.shared) : ""}
+      </span>
+
+      {/* labels */}
+      <div className="flex w-24 shrink-0 items-center gap-1 px-2">
+        {visibleLabels.map((l) => (
+          <Badge key={l} variant="secondary" className="truncate px-1 py-0 text-[10px]">
+            {l}
+          </Badge>
+        ))}
+        {overflowCount > 0 && (
+          <span className="text-[10px] text-muted-foreground">+{overflowCount}</span>
+        )}
+      </div>
+
+      {/* estimate */}
+      <span className="w-16 shrink-0 px-2 text-right text-xs text-muted-foreground">
+        {item.estimate != null ? `${item.estimate} ${copy.shared.points}` : ""}
+      </span>
     </button>
   );
 }

@@ -83,6 +83,22 @@ function normalizeEstimate(value: unknown): number | null {
   return value;
 }
 
+function normalizeStartDate(value: unknown): string | null {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error("startDate must be a string.");
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("startDate must use YYYY-MM-DD format.");
+  }
+
+  return value;
+}
+
 function normalizeDueDate(value: unknown): string | null {
   if (value == null || value === "") {
     return null;
@@ -214,6 +230,7 @@ export function normalizeCreateWorkItemInput(
       value.priority == null ? "medium" : normalizePriority(value.priority),
     labels: normalizeLabels(value.labels),
     estimate: normalizeEstimate(value.estimate),
+    startDate: normalizeStartDate(value.startDate),
     dueDate: normalizeDueDate(value.dueDate),
     isBlocked: typeof value.isBlocked === "boolean" ? value.isBlocked : false,
     coverImage: normalizeCoverImage(value.coverImage),
@@ -271,6 +288,10 @@ export function normalizeUpdateWorkItemInput(
 
   if ("estimate" in value) {
     next.estimate = normalizeEstimate(value.estimate);
+  }
+
+  if ("startDate" in value) {
+    next.startDate = normalizeStartDate(value.startDate);
   }
 
   if ("dueDate" in value) {

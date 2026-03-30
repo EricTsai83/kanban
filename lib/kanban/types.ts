@@ -4,6 +4,12 @@ export type KanbanPriority = (typeof KANBAN_PRIORITIES)[number];
 
 export type KanbanGroupBy = "workflow" | "assignee" | "priority" | "status";
 
+export type KanbanViewMode = "board" | "list" | "gantt";
+
+export type KanbanSortField = "priority" | "title" | "status" | "assignee" | "dueDate";
+
+export type KanbanSortDir = "asc" | "desc" | null;
+
 export type KanbanColumn = {
   id: string;
   name: string;
@@ -18,6 +24,7 @@ export type KanbanWorkItem = {
   priority: KanbanPriority;
   labels: string[];
   estimate: number | null;
+  startDate: string | null;
   dueDate: string | null;
   isBlocked: boolean;
   coverImage: string | null;
@@ -54,6 +61,7 @@ export type CreateWorkItemInput = {
   priority?: KanbanPriority;
   labels?: string[];
   estimate?: number | null;
+  startDate?: string | null;
   dueDate?: string | null;
   isBlocked?: boolean;
   coverImage?: string | null;
@@ -68,6 +76,7 @@ export type UpdateWorkItemInput = {
   priority?: KanbanPriority;
   labels?: string[];
   estimate?: number | null;
+  startDate?: string | null;
   dueDate?: string | null;
   isBlocked?: boolean;
   coverImage?: string | null;

@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Board uses a dark sidebar rail with a light content area
-The system SHALL render a narrow dark sidebar on the left and a light-background content area for the board. The sidebar MUST contain icon-based navigation and a settings entry point.
+The system SHALL render a narrow sidebar on the left using a solid, flat dark color (no transparency, no blur, no gradient overlay). The sidebar background MUST be a single solid grayscale value that is visually distinct from but harmonious with the main content background. The sidebar MUST contain icon-based navigation and a settings entry point.
 
 #### Scenario: Sidebar renders on board load
 - **WHEN** a user loads the engineering kanban board
-- **THEN** the system displays a dark sidebar rail on the left with icon links and the board content fills the remaining viewport width
+- **THEN** the system displays a solid-color dark sidebar rail on the left with icon links, and the board content fills the remaining viewport width with a flat background color
 
 ### Requirement: Work items render as slim inline rows instead of bordered cards
 The system SHALL display each work item as a compact inline row with a left-edge priority color accent, title text, and assignee initial. Visible borders around individual items MUST be removed.
@@ -22,8 +22,8 @@ The system SHALL render board columns without heavy rounded card containers. Col
 - **THEN** each column is visually distinct through spacing and background tint, not through bordered card wrappers
 
 ### Requirement: Typography and spacing follow a defined hierarchy
-The system SHALL use a consistent type scale and spacing system where column headers are prominent, item titles are medium weight, and metadata is subdued — achieving visual hierarchy without relying on card borders.
+The system SHALL use a precise type scale: column headers at 11px uppercase with wide letter-spacing, item titles at 13px, metadata at 11px subdued. The border-radius SHALL be 6px maximum. Borders SHALL be near-invisible (3-6% opacity) or replaced by spacing. Visual hierarchy SHALL be achieved through grayscale levels and typography alone, not through borders or decorative effects.
 
 #### Scenario: Visual hierarchy is readable at a glance
 - **WHEN** a user scans the board
-- **THEN** column names, item titles, and metadata are distinguishable by font size and weight alone
+- **THEN** column names, item titles, and metadata are distinguishable by font size, weight, letter-spacing, and grayscale level alone — without relying on borders, shadows, or color accents
