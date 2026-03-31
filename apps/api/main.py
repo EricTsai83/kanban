@@ -50,7 +50,11 @@ async def api_key_middleware(request: Request, call_next):
     if request.method == "OPTIONS":
         return await call_next(request)
     if _api_key and request.headers.get("X-API-Key") != _api_key:
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Unauthorized"},
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
     return await call_next(request)
 
 # ── Exception handlers ─────────────────────────────────────────────────────────
