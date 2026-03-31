@@ -32,7 +32,9 @@ async def lifespan(app: FastAPI):
 
 _api_key = os.environ.get("API_KEY", "").strip()
 
-def _verify_api_key(x_api_key: str = Header(default="")) -> None:
+def _verify_api_key(request: Request, x_api_key: str = Header(default="")) -> None:
+    if request.method == "OPTIONS":
+        return
     if _api_key and x_api_key != _api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
