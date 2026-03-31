@@ -76,6 +76,7 @@ import { UserMenu } from "@/components/auth/user-menu";
 import { useAuth } from "@/lib/auth-context";
 
 import { formatMessage, getDictionary, type AppDictionary, type Locale } from "@/lib/i18n";
+import { apiUrl } from "@/lib/api";
 import { KANBAN_PRIORITIES } from "@/lib/kanban/constants";
 import type {
   CreateWorkItemInput,
@@ -459,6 +460,7 @@ export function KanbanApp() {
   const [sortDir, setSortDir] = useState<KanbanSortDir>(null);
 
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cmdQuery, setCmdQuery] = useState("");
@@ -481,7 +483,7 @@ export function KanbanApp() {
   useEffect(() => {
     (async () => {
       try {
-        const d = await api<BoardResponse>("/api/kanban", {
+        const d = await api<BoardResponse>(apiUrl("/kanban"), {
           cache: "no-store",
         });
         setBoard(d.board);
@@ -600,7 +602,7 @@ export function KanbanApp() {
     setError(null);
     setMutating(true);
     try {
-      const d = await api<BoardResponse>("/api/kanban", {
+      const d = await api<BoardResponse>(apiUrl("/kanban"), {
         method: "POST",
         body: JSON.stringify({ name: boardName }),
       });
@@ -616,7 +618,7 @@ export function KanbanApp() {
     setError(null);
     setMutating(true);
     try {
-      const d = await api<BoardResponse>("/api/kanban/columns", {
+      const d = await api<BoardResponse>(apiUrl("/kanban/columns"), {
         method: "PATCH",
         body: JSON.stringify({ columns: draftCols }),
       });
@@ -643,7 +645,7 @@ export function KanbanApp() {
               id: activeId as string,
               ...p,
             } satisfies UpdateWorkItemInput);
-      const d = await api<BoardResponse>("/api/kanban/items", {
+      const d = await api<BoardResponse>(apiUrl("/kanban/items"), {
         method: formMode === "create" ? "POST" : "PATCH",
         body: JSON.stringify(body),
       });
@@ -665,7 +667,7 @@ export function KanbanApp() {
     setBoard(optimisticMove(board, itemId, dest));
     setError(null);
     try {
-      const d = await api<BoardResponse>("/api/kanban/items", {
+      const d = await api<BoardResponse>(apiUrl("/kanban/items"), {
         method: "PATCH",
         body: JSON.stringify({
           id: itemId,
@@ -680,6 +682,13 @@ export function KanbanApp() {
       setDraggingId(null);
       setDragOverCol(null);
     }
+  }
+
+  async function deleteItem(itemId: string) {
+    const d = await api<BoardResponse>(apiUrl(`/kanban/items/${itemId}`), {
+      method: "DELETE",
+    });
+    refresh(d.board);
   }
 
   function openCreate() {
@@ -1129,7 +1138,7 @@ export function KanbanApp() {
       </main>
 
       {/* ── item editor dialog ── */}
-      <Dialog open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Dialog open={sheetOpen} onOpenChange={(open) => { setSheetOpen(open); if (!open) setConfirmDelete(false); }}>
         <DialogContent className="sm:max-w-lg overflow-y-auto max-h-[85vh] p-0">
           {/* hero cover image */}
           {form.coverImage && (
@@ -1319,6 +1328,46 @@ export function KanbanApp() {
               >
                 {copy.itemEditor.cancel}
               </Button>
+              {formMode === "edit" && activeId && (
+                confirmDelete ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={mutating}
+                    onClick={async () => {
+                      setError(null);
+                      setMutating(true);
+                      try {
+                        await deleteItem(activeId);
+                        setSheetOpen(false);
+                      } catch (e) {
+                        setError(errMsg(e));
+                      } finally {
+                        setMutating(false);
+                        setConfirmDelete(false);
+                      }
+                    }}
+                  >
+                    {mutating ? copy.itemEditor.deleting : copy.itemEditor.confirmDelete}
+                  </Button>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setConfirmDelete(true)}
+                        />
+                      }
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </TooltipTrigger>
+                    <TooltipContent>{copy.itemEditor.delete}</TooltipContent>
+                  </Tooltip>
+                )
+              )}
             </div>
           </form>
           </div>

@@ -82,6 +82,9 @@ const en = {
     labelsPlaceholder: "frontend, api",
     coverImage: "Cover Image URL",
     unassigned: "Unassigned",
+    delete: "Delete",
+    confirmDelete: "Confirm delete?",
+    deleting: "Deleting...",
   },
   commands: {
     title: "Search & Filter",
@@ -250,6 +253,9 @@ const zhTw: DeepPartial<Dictionary> = {
     labelsPlaceholder: "frontend, api",
     coverImage: "封面圖片 URL",
     unassigned: "未指派",
+    delete: "刪除",
+    confirmDelete: "確認刪除？",
+    deleting: "刪除中...",
   },
   commands: {
     title: "搜尋與篩選",
