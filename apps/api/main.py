@@ -4,7 +4,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,9 +28,17 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
+# ── API Key ────────────────────────────────────────────────────────────────────
+
+_api_key = os.environ.get("API_KEY", "").strip()
+
+def _verify_api_key(x_api_key: str = Header(default="")) -> None:
+    if _api_key and x_api_key != _api_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
 # ── App ────────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Kanban API", lifespan=lifespan)
+app = FastAPI(title="Kanban API", lifespan=lifespan, dependencies=[Depends(_verify_api_key)])
 
 # ── CORS ───────────────────────────────────────────────────────────────────────
 
@@ -40,22 +48,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ── API Key ────────────────────────────────────────────────────────────────────
-
-_api_key = os.environ.get("API_KEY", "").strip()
-
-@app.middleware("http")
-async def api_key_middleware(request: Request, call_next):
-    if request.method == "OPTIONS":
-        return await call_next(request)
-    if _api_key and request.headers.get("X-API-Key") != _api_key:
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Unauthorized"},
-            headers={"Access-Control-Allow-Origin": "*"},
-        )
-    return await call_next(request)
 
 # ── Exception handlers ─────────────────────────────────────────────────────────
 
