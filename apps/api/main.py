@@ -34,18 +34,24 @@ app = FastAPI(title="Kanban API", lifespan=lifespan)
 
 # ── CORS ───────────────────────────────────────────────────────────────────────
 
-_allowed_origins = ["http://localhost:3000"]
-_extra_origin = os.environ.get("ALLOWED_ORIGIN", "").strip()
-if _extra_origin:
-    _allowed_origins.append(_extra_origin)
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins,
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── API Key ────────────────────────────────────────────────────────────────────
+
+_api_key = os.environ.get("API_KEY", "").strip()
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    if _api_key and request.headers.get("X-API-Key") != _api_key:
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    return await call_next(request)
 
 # ── Exception handlers ─────────────────────────────────────────────────────────
 
