@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(openspec --help)",
+      "Bash(npx openspec:*)",
+      "Bash(ls:*)",
+      "Bash(uv --version)",
+      "Bash(curl -LsSf https://astral.sh/uv/install.sh)",
+      "Bash(sh)",
+      "Bash(export PATH=\"$HOME/.local/bin:$PATH\")",
+      "Bash(uv sync:*)"
+    ]
+  }
+}

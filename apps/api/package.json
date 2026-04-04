@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "python3 -m uvicorn main:app --reload --port 8000"
+    "postinstall": "uv sync",
+    "dev": "uv run uvicorn main:app --reload --port 8000"
   }
 }
