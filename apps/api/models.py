@@ -89,6 +89,27 @@ class DeleteWorkItemRequest(BaseModel):
     item_id: Optional[str] = None
 
 
+# ── Report ────────────────────────────────────────────────────────────────────
+
+DateField = Literal["createdAt", "updatedAt", "dueDate", "startDate"]
+
+
+class ReportGroup(BaseModel):
+    column: str
+    items: list[KanbanWorkItem]
+
+
+class ReportSummary(BaseModel):
+    total: int
+    byPriority: dict[str, int]
+    byColumn: dict[str, int]
+
+
+class ReportResponse(BaseModel):
+    items: list[ReportGroup]
+    summary: ReportSummary
+
+
 # ── Response ───────────────────────────────────────────────────────────────────
 
 class BoardResponse(BaseModel):

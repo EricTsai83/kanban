@@ -16,6 +16,7 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
+  FileText,
   Filter,
   GanttChart,
   ImageIcon,
@@ -72,6 +73,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { useI18n } from "@/components/i18n-provider";
+import { ReportSheet } from "@/components/report-sheet";
 import { UserMenu } from "@/components/auth/user-menu";
 import { useAuth } from "@/lib/auth-context";
 
@@ -466,6 +468,7 @@ export function KanbanApp() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [cmdQuery, setCmdQuery] = useState("");
 
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -842,6 +845,21 @@ export function KanbanApp() {
               <Settings className="h-4 w-4" />
             </TooltipTrigger>
             <TooltipContent side="right">{copy.shell.settings}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-sidebar-foreground/60 transition-colors duration-120 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground!"
+                  onClick={() => setReportOpen(true)}
+                />
+              }
+            >
+              <FileText className="h-4 w-4" />
+            </TooltipTrigger>
+            <TooltipContent side="right">{copy.report.button}</TooltipContent>
           </Tooltip>
         </div>
 
@@ -1609,6 +1627,8 @@ export function KanbanApp() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <ReportSheet open={reportOpen} onOpenChange={setReportOpen} copy={copy} />
     </>
   );
 }

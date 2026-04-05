@@ -7,7 +7,15 @@ from typing import Optional
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import KanbanBoard, KanbanColumn, KanbanWorkItem
+from models import (
+    DateField,
+    KanbanBoard,
+    KanbanColumn,
+    KanbanWorkItem,
+    ReportGroup,
+    ReportResponse,
+    ReportSummary,
+)
 from orm import BoardRow, ColumnRow, WorkItemRow
 from validation import (
     normalize_board_name,
@@ -204,6 +212,71 @@ async def delete_work_item(item_id: str, db: AsyncSession) -> KanbanBoard:
 
     await db.flush()
     return await _assemble_board(board_row, db)
+
+
+_DATE_FIELD_TO_COLUMN = {
+    "createdAt": WorkItemRow.created_at,
+    "updatedAt": WorkItemRow.updated_at,
+    "dueDate": WorkItemRow.due_date,
+    "startDate": WorkItemRow.start_date,
+}
+
+
+async def generate_report(
+    start_date: str, end_date: str, date_field: DateField, db: AsyncSession
+) -> ReportResponse:
+    board = await _require_board(db)
+    col_attr = _DATE_FIELD_TO_COLUMN[date_field]
+
+    query = (
+        select(WorkItemRow)
+        .where(WorkItemRow.board_id == board.id)
+        .where(col_attr.isnot(None))
+    )
+
+    # createdAt/updatedAt are ISO datetimes — compare date prefix
+    # dueDate/startDate are YYYY-MM-DD strings — direct comparison works
+    if date_field in ("createdAt", "updatedAt"):
+        query = query.where(col_attr >= start_date).where(
+            col_attr < end_date + "T\xff"
+        )
+    else:
+        query = query.where(col_attr >= start_date).where(col_attr <= end_date)
+
+    result = await db.execute(query.order_by(WorkItemRow.order))
+    rows = result.scalars().all()
+
+    # Build column id -> name mapping
+    col_map = {c.id: c.name for c in board.columns}
+
+    # Group by column
+    groups: dict[str, list[KanbanWorkItem]] = {}
+    for row in rows:
+        item = _row_to_item(row)
+        col_name = col_map.get(row.column_id, "Unknown")
+        groups.setdefault(col_name, []).append(item)
+
+    # Preserve column order
+    report_groups = []
+    for col in board.columns:
+        if col.name in groups:
+            report_groups.append(ReportGroup(column=col.name, items=groups[col.name]))
+
+    # Summary
+    all_items = [item for g in report_groups for item in g.items]
+    by_priority: dict[str, int] = {}
+    for item in all_items:
+        by_priority[item.priority] = by_priority.get(item.priority, 0) + 1
+    by_column: dict[str, int] = {g.column: len(g.items) for g in report_groups}
+
+    return ReportResponse(
+        items=report_groups,
+        summary=ReportSummary(
+            total=len(all_items),
+            byPriority=by_priority,
+            byColumn=by_column,
+        ),
+    )
 
 
 async def update_work_item(payload: object, db: AsyncSession) -> KanbanBoard:
