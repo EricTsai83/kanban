@@ -181,6 +181,9 @@ const en = {
     fieldUpdatedAt: "Updated",
     fieldDueDate: "Due date",
     fieldStartDate: "Start date",
+    groupBy: "Group by",
+    groupByColumn: "Column",
+    groupByAssignee: "Assignee",
   },
   fields: {
     boardName: "Board name",
@@ -363,6 +366,9 @@ const zhTw: DeepPartial<Dictionary> = {
     fieldUpdatedAt: "更新日期",
     fieldDueDate: "到期日",
     fieldStartDate: "開始日期",
+    groupBy: "分組方式",
+    groupByColumn: "欄位",
+    groupByAssignee: "負責人",
   },
   fields: {
     boardName: "看板名稱",

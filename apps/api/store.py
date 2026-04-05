@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import (
     DateField,
+    GroupBy,
     KanbanBoard,
     KanbanColumn,
     KanbanWorkItem,
@@ -223,7 +224,8 @@ _DATE_FIELD_TO_COLUMN = {
 
 
 async def generate_report(
-    start_date: str, end_date: str, date_field: DateField, db: AsyncSession
+    start_date: str, end_date: str, date_field: DateField, db: AsyncSession,
+    group_by: GroupBy = "column",
 ) -> ReportResponse:
     board = await _require_board(db)
     col_attr = _DATE_FIELD_TO_COLUMN[date_field]
@@ -249,25 +251,44 @@ async def generate_report(
     # Build column id -> name mapping
     col_map = {c.id: c.name for c in board.columns}
 
-    # Group by column
-    groups: dict[str, list[KanbanWorkItem]] = {}
+    # Convert rows to items
+    items_with_meta = []
     for row in rows:
         item = _row_to_item(row)
         col_name = col_map.get(row.column_id, "Unknown")
-        groups.setdefault(col_name, []).append(item)
+        items_with_meta.append((item, col_name, row.assignee or ""))
 
-    # Preserve column order
-    report_groups = []
-    for col in board.columns:
-        if col.name in groups:
-            report_groups.append(ReportGroup(column=col.name, items=groups[col.name]))
+    # Group items
+    groups: dict[str, list[KanbanWorkItem]] = {}
+    if group_by == "assignee":
+        for item, _col_name, assignee in items_with_meta:
+            key = assignee if assignee else "Unassigned"
+            groups.setdefault(key, []).append(item)
+        # Alphabetical order
+        report_groups = [
+            ReportGroup(column=k, items=groups[k])
+            for k in sorted(groups.keys())
+        ]
+    else:
+        for item, col_name, _assignee in items_with_meta:
+            groups.setdefault(col_name, []).append(item)
+        # Preserve column order
+        report_groups = []
+        for col in board.columns:
+            if col.name in groups:
+                report_groups.append(ReportGroup(column=col.name, items=groups[col.name]))
 
     # Summary
-    all_items = [item for g in report_groups for item in g.items]
+    all_items = [t[0] for t in items_with_meta]
     by_priority: dict[str, int] = {}
-    for item in all_items:
+    by_assignee: dict[str, int] = {}
+    for item, _col_name, assignee in items_with_meta:
         by_priority[item.priority] = by_priority.get(item.priority, 0) + 1
-    by_column: dict[str, int] = {g.column: len(g.items) for g in report_groups}
+        assignee_key = assignee if assignee else "Unassigned"
+        by_assignee[assignee_key] = by_assignee.get(assignee_key, 0) + 1
+    by_column: dict[str, int] = {}
+    for _item, col_name, _assignee in items_with_meta:
+        by_column[col_name] = by_column.get(col_name, 0) + 1
 
     return ReportResponse(
         items=report_groups,
@@ -275,6 +296,7 @@ async def generate_report(
             total=len(all_items),
             byPriority=by_priority,
             byColumn=by_column,
+            byAssignee=by_assignee,
         ),
     )
 

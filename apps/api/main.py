@@ -16,6 +16,7 @@ from models import (
     CreateWorkItemRequest,
     DateField,
     DeleteWorkItemRequest,
+    GroupBy,
     ReportResponse,
     SaveColumnsRequest,
     UpdateWorkItemRequest,
@@ -83,6 +84,7 @@ async def get_report(
     start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
     date_field: DateField = Query("updatedAt", description="Date field to filter on"),
+    group_by: GroupBy = Query("column", description="Group results by column or assignee"),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     if start_date > end_date:
@@ -90,7 +92,7 @@ async def get_report(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="start_date must be before or equal to end_date",
         )
-    return await generate_report(start_date, end_date, date_field, db)
+    return await generate_report(start_date, end_date, date_field, db, group_by)
 
 
 @app.post("/kanban", response_model=BoardResponse, status_code=status.HTTP_201_CREATED)

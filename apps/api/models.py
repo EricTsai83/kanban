@@ -92,6 +92,7 @@ class DeleteWorkItemRequest(BaseModel):
 # ── Report ────────────────────────────────────────────────────────────────────
 
 DateField = Literal["createdAt", "updatedAt", "dueDate", "startDate"]
+GroupBy = Literal["column", "assignee"]
 
 
 class ReportGroup(BaseModel):
@@ -103,6 +104,7 @@ class ReportSummary(BaseModel):
     total: int
     byPriority: dict[str, int]
     byColumn: dict[str, int]
+    byAssignee: dict[str, int]
 
 
 class ReportResponse(BaseModel):

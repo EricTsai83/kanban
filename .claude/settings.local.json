@@ -12,7 +12,15 @@
       "Bash(openspec list:*)",
       "Bash(npm list:*)",
       "Bash(npx next:*)",
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(openspec new:*)",
+      "Bash(npx tsc:*)",
+      "Bash(python3 -c \"from models import GroupBy, ReportSummary; print\\('models OK'\\)\")",
+      "Bash(python3 -c \"from store import generate_report; print\\('store OK'\\)\")",
+      "Bash(python3 -c \"from main import app; print\\('main OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('models.py'\\).read\\(\\)\\); print\\('models.py OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('store.py'\\).read\\(\\)\\); print\\('store.py OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('main.py OK'\\)\")"
     ]
   }
 }

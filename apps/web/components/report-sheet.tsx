@@ -22,6 +22,7 @@ import type { AppDictionary } from "@/lib/i18n";
 import {
   fetchReport,
   type DateField,
+  type GroupBy,
   type ReportResponse,
 } from "@/lib/api";
 
@@ -48,7 +49,25 @@ function dateFieldLabel(field: DateField, copy: AppDictionary): string {
   return map[field];
 }
 
-function toCSV(report: ReportResponse): string {
+function toCSV(report: ReportResponse, groupBy: GroupBy): string {
+  if (groupBy === "assignee") {
+    const header = "Assignee,ID,Title,Priority,Column,Due Date,Estimate";
+    const rows = report.items.flatMap((g) =>
+      g.items.map(
+        (item) =>
+          [
+            `"${g.column}"`,
+            `"${item.id}"`,
+            `"${item.title.replace(/"/g, '""')}"`,
+            item.priority,
+            `"${item.columnId}"`,
+            item.dueDate ?? "",
+            item.estimate ?? "",
+          ].join(","),
+      ),
+    );
+    return [header, ...rows].join("\n");
+  }
   const header = "Column,ID,Title,Priority,Assignee,Due Date,Estimate";
   const rows = report.items.flatMap((g) =>
     g.items.map(
@@ -76,6 +95,7 @@ export function ReportSheet({ open, onOpenChange, copy }: ReportSheetProps) {
   const [startDate, setStartDate] = useState(thirtyDaysAgo);
   const [endDate, setEndDate] = useState(today);
   const [dateField, setDateField] = useState<DateField>("updatedAt");
+  const [groupBy, setGroupBy] = useState<GroupBy>("column");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,8 +103,8 @@ export function ReportSheet({ open, onOpenChange, copy }: ReportSheetProps) {
     setLoading(true);
     setError(null);
     try {
-      const report = await fetchReport(startDate, endDate, dateField);
-      const blob = new Blob([toCSV(report)], { type: "text/csv" });
+      const report = await fetchReport(startDate, endDate, dateField, groupBy);
+      const blob = new Blob([toCSV(report, groupBy)], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -96,7 +116,7 @@ export function ReportSheet({ open, onOpenChange, copy }: ReportSheetProps) {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, dateField, copy]);
+  }, [startDate, endDate, dateField, groupBy, copy]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -143,6 +163,26 @@ export function ReportSheet({ open, onOpenChange, copy }: ReportSheetProps) {
                     {dateFieldLabel(f, copy)}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label className="mb-1 text-xs">{copy.report.groupBy}</Label>
+            <Select
+              value={groupBy}
+              onValueChange={(v) => setGroupBy(v as GroupBy)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="column">
+                  {copy.report.groupByColumn}
+                </SelectItem>
+                <SelectItem value="assignee">
+                  {copy.report.groupByAssignee}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
